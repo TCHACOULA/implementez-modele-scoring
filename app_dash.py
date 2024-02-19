@@ -15,6 +15,7 @@ from dash.dependencies import Input, Output
 import plotly.express as px
 import dash_bootstrap_components as dbc
 import requests
+import shap
 
 external_stylesheets = [dbc.themes.BOOTSTRAP]
 
@@ -44,7 +45,7 @@ y = df_application_train['TARGET']
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.20, random_state=42)
 df_clean_train = pd.concat([X, y], axis=1)
 
-
+    
 # Initialisation de l'application Dash
 app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
 
@@ -61,7 +62,8 @@ app.layout = html.Div(children=[
                     dcc.Input(
                         id="input-client",
                         type="text",
-                        placeholder="Entrez l'id d'un client"
+                        placeholder="Entrez l'id d'un client",
+                        value="0"
                     ),
                     md=3
 
@@ -88,9 +90,21 @@ app.layout = html.Div(children=[
             dcc.Dropdown(options=X_test.columns[1:], value='CODE_GENDER', id='feature-dropdown-bi2'))  
     ]),
     dcc.Graph(figure={}, id='feature-distribution-bi'),
-    #dcc.Dropdown(options=X_test.columns[1:], value='CODE_GENDER', id='feature-score_metier'),
-    #dcc.Graph(figure={}, id='feature-score_metier'),
+    html.Hr(),
 
+    # Créer un composant graphique Dash à partir de la figure
+    html.Div([
+        dcc.Graph(
+            id='global-importance',
+            figure={}
+        ),
+        dcc.Graph(
+            id='local-importance',
+            figure={}  # Afficher les valeurs pour le premier échantillon
+        ),
+
+    ]),
+   
 ])
 
 @callback(
@@ -104,30 +118,123 @@ def update_prediction(client_id):
 # Définition des callbacks pour les mises à jour dynamiques
 @callback(
     Output(component_id='feature-distribution', component_property='figure'),
-    Input(component_id='feature-dropdown', component_property='value')
+    Input(component_id='feature-dropdown', component_property='value'),
+    Input(component_id='input-client', component_property='value')
 )
-def update_graph(col_chosen):
+def update_graph(col_chosen, client_id):
     fig = px.histogram(df_clean_train, x=col_chosen, color="TARGET", title=f'Distribution en fonction de {col_chosen}')
+    fig.add_vline(
+        x=df_clean_train.loc[int(client_id), col_chosen],
+        line_dash="dash",
+        line_color="red",
+        annotation_text=f"Client id: {client_id}",
+        annotation_position="top right"
+    )
     return fig
 
 
 @callback(
     Output(component_id='feature-distribution-bi', component_property='figure'),
     Input(component_id='feature-dropdown-bi1', component_property='value'),
-    Input(component_id='feature-dropdown-bi2', component_property='value')
+    Input(component_id='feature-dropdown-bi2', component_property='value'),
+    Input(component_id='input-client', component_property='value')
 )
-def update_graph_bi(feature_bi1, feature_bi2):
+def update_graph_bi(feature_bi1, feature_bi2, client_id):
     fig = px.scatter(df_clean_train, x=feature_bi1, y=feature_bi2, color="TARGET", title=f'Analyse bivariée en fonction de {feature_bi1} et {feature_bi2}')
+    fig.add_trace(px.scatter(
+        x=[df_clean_train.loc[int(client_id), feature_bi1]],
+        y=[df_clean_train.loc[int(client_id), feature_bi2]],
+        color=[1],
+        size=[100]).data[0])
     return fig
 
-#Définition des callbacks pour les mises à jour dynamiques
-#@callback(
-#    Output(component_id='feature-score_metier', component_property='figure'),
-#    Input(component_id='score_metier', component_property='value')
-#)
-#def update_graph(col_chosen):
-#    fig = px.histogram(df_clean_train, x=col_chosen, color="TARGET", title=f'Score en fonction de {col_chosen}')
-#    return fig
+# Fonction pour entraîner un modèle et obtenir les importances des fonctionnalités
+def train_model_and_get_feature_importance(data, client_id):
+    # Filtrer les données en fonction du client spécifié
+    #filtered_data = data.loc[client_id]
+    
+    # Séparation des caractéristiques et de la cible
+    X = data.drop('TARGET', axis=1)
+    medians = X.median()  
+    X.replace(np.inf, medians, inplace=True)
+    X.replace(-np.inf, medians, inplace=True)
+    X = X.fillna(medians)
+    y = data['TARGET']
+    
+    # Création du modèle
+    model = RandomForestClassifier()
+    
+    # Entraînement du modèle
+    model.fit(X, y)
+    
+    # Initialiser l'explorateur SHAP avec le modèle entraîné
+    explainer = shap.TreeExplainer(model)
+    
+    # Calculer les valeurs SHAP pour l'ensemble des données
+    shap_values = explainer.shap_values(X)
+    
+    # Obtention de l'importance globale
+    
+    global_shap_df = (
+        pd.DataFrame(np.abs(shap_values.values)
+        .mean(axis=0), index=X.columns, columns=['SHAP Value'])
+        .sort_values(by='SHAP Value', ascending=False)
+    )
+    print(global_shap_df)
+    local_shap_values = (
+        pd.DataFrame(shap_values.values[client_id], index=X.columns, columns=['SHAP Value'])
+        .sort_values(by='SHAP Value', ascending=False)
+    )
+    print(local_shap_values)
+    return local_shap_values, global_shap_df
+
+
+# Obtenir les valeurs SHAP et l'importance globale avec SHAP
+#shap_values, global_importance = train_model_and_get_feature_importance(df_clean_train, client_id=client_id)
+
+# Créer un graphique à barres pour afficher l'importance globale
+def create_global_importance_graph(global_importance):
+    fig = px.bar(
+        global_importance,
+        y=global_importance.index,
+        x="Shap value",
+        orientation="h",
+        #text=[global_importance],
+        #labels={'x': 'Importance', 'y': 'Value'},
+        title='Global Feature Importance'
+    )
+    return fig
+
+# Créer un graphique à barres pour afficher l'importance locale
+def create_local_importance_graph(shap_values, client_id):
+    fig = px.bar(
+        shap_values,
+        y=shap_values.index,
+        x="Shap value",
+        orientation="h",
+        #text=['Feature ' + str(i) for i in range(len(shap_values[index]))],
+        #labels={'x': 'Feature Index', 'y': 'Importance'},
+        title='Local Feature Importance (Sample ' + str(client_id) + ')'
+    )
+    return fig
+
+# Définition des callbacks pour mettre à jour les graphiques d'importance globale et locale
+@callback(
+    Output(component_id='global-importance', component_property='figure'),
+    Output(component_id='local-importance', component_property='figure'),
+    Input(component_id='input-client', component_property='value')
+)
+def update_feature_importance(client_id):
+    # Entraîner le modèle et obtenir les importances des fonctionnalités
+    shap_values, global_importance = train_model_and_get_feature_importance(df_clean_train, int(client_id))
+    print(shap_values)
+    print(global_importance)
+    # Créer les graphiques d'importance globale et locale
+    global_fig = create_global_importance_graph(global_importance)
+    local_fig = create_local_importance_graph(shap_values, int(client_id))  # Afficher les valeurs pour le premier échantillon
+    
+    return global_fig, local_fig
+
 
 # Lancement de l'application
 if __name__ == '__main__':
