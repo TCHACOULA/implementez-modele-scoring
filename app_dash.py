@@ -35,12 +35,14 @@ df_clean.drop(columns=["index", "Pourcentage_manquant"], inplace=True)
 
 # Split des données
 df_application_train = df_clean[df_clean['TARGET'].notnull()]
-df_application_test = df_clean[df_clean['TARGET'].isnull()]
-X = df_application_train.drop('TARGET', axis=1)
-medians = X.median()  # Calculer la médiane de chaque colonne
-X.replace(np.inf, medians, inplace=True)
-X.replace(-np.inf, medians, inplace=True)
-X = X.fillna(medians)
+#df_application_test = df_clean[df_clean['TARGET'].isnull()]
+#X = df_application_train.drop('TARGET', axis=1)
+#medians = X.median()  # Calculer la médiane de chaque colonne
+#X.replace(np.inf, medians, inplace=True)
+#X.replace(-np.inf, medians, inplace=True)
+#X = X.fillna(medians)
+X = pd.read_csv("~/oc-projects/implementez-modele-scoring/X.csv")
+df_application_test = pd.read_csv("~/oc-projects/implementez-modele-scoring/df_application_test.csv")
 y = df_application_train['TARGET']
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.20, random_state=42)
 df_clean_train = pd.concat([X, y], axis=1)
@@ -53,7 +55,7 @@ app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
 app.layout = html.Div(children=[
     html.H1(children='Tableau de Bord avec Prédictions'),
     html.Hr(),
-    dash_table.DataTable(data=X_test.head(10).to_dict('records'), page_size=10),
+    dash_table.DataTable(data=df_application_test.head(10).to_dict('records'), page_size=10),
     html.Hr(),
     html.Div(
         [
@@ -81,13 +83,13 @@ app.layout = html.Div(children=[
     ),
     html.Hr(),
     html.Label('Sélectionnez une colonne :'),
-    dcc.Dropdown(options=X_test.columns[1:], value='CODE_GENDER', id='feature-dropdown'),
+    dcc.Dropdown(options=df_application_test.columns[1:], value='CODE_GENDER', id='feature-dropdown'),
     dcc.Graph(figure={}, id='feature-distribution'),
     dbc.Row([
         dbc.Col(
-            dcc.Dropdown(options=X_test.columns[1:], value='CODE_GENDER', id='feature-dropdown-bi1')),
+            dcc.Dropdown(options=df_application_test.columns[1:], value='CODE_GENDER', id='feature-dropdown-bi1')),
         dbc.Col(
-            dcc.Dropdown(options=X_test.columns[1:], value='CODE_GENDER', id='feature-dropdown-bi2'))  
+            dcc.Dropdown(options=df_application_test.columns[1:], value='CODE_GENDER', id='feature-dropdown-bi2'))  
     ]),
     dcc.Graph(figure={}, id='feature-distribution-bi'),
     html.Hr(),
