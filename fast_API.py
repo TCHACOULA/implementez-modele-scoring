@@ -36,12 +36,13 @@ from pydantic import BaseModel
 #df_application_test.replace(-np.inf, medians, inplace=True)
 #df_application_test = df_application_test.fillna(medians)
 
-X = pd.read_csv("~/oc-projects/implementez-model-scoring/X.csv")
-df_application_test = pd.read_csv("~/oc-projects/implementez-model-scoring/df_application_test.csv")
+X = pd.read_csv("~/oc-projects/implementez-modele-scoring/X.csv")
+df_application_test = pd.read_csv("~/oc-projects/implementez-modele-scoring/df_application_test.csv")
 #X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.20, random_state=42)
 
 # chargement du modèle
-loaded_model = load("~/oc-projects/implementez-model-scoring/lgbm.joblib")
+#loaded_model = load("~/oc-projects/implementez-modele-scoring/lgbm.joblib")
+loaded_model = load("/home/saliou/oc-projects/implementez-modele-scoring/lgbm.joblib")
 # Création du nouvelle instance fastAPI
 app = FastAPI()
 
