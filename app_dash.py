@@ -19,34 +19,9 @@ import shap
 
 external_stylesheets = [dbc.themes.BOOTSTRAP]
 
-# Création du df_clean
-df = pd.read_csv("/home/saliou/Bureau/Projets/Projet7/fichierdata.csv")
-feat_importance = pd.read_csv("/home/saliou/Bureau/Projets/Projet7/feat_importance.csv")
-df_importance = feat_importance.groupby(["feature"]).mean()["importance"].reset_index().sort_values("importance", ascending=False)
-columns_to_drop = df_importance[df_importance["importance"]  < 72]["feature"].reset_index(drop=True)
-df_clean = df.drop(columns=columns_to_drop).reset_index(drop=True)
-missing_percentages = df_clean.isna().mean().sort_values(ascending=False)
-columns_to_drop = missing_percentages[missing_percentages > 0.6].index
-df_clean = df_clean.drop(columns=columns_to_drop)
-pourcentage_nan_par_ligne = df_clean.isnull().mean(axis=1)
-df_clean['Pourcentage_manquant'] = pourcentage_nan_par_ligne
-df_clean = df_clean[df_clean['Pourcentage_manquant'] < 0.60].reset_index(drop=True)
-df_clean.drop(columns=["index", "Pourcentage_manquant"], inplace=True)
-
-# Split des données
-df_application_train = df_clean[df_clean['TARGET'].notnull()]
-#df_application_test = df_clean[df_clean['TARGET'].isnull()]
-#X = df_application_train.drop('TARGET', axis=1)
-#medians = X.median()  # Calculer la médiane de chaque colonne
-#X.replace(np.inf, medians, inplace=True)
-#X.replace(-np.inf, medians, inplace=True)
-#X = X.fillna(medians)
 X = pd.read_csv("~/oc-projects/implementez-modele-scoring/X.csv")
 df_application_test = pd.read_csv("~/oc-projects/implementez-modele-scoring/df_application_test.csv")
-y = df_application_train['TARGET']
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.20, random_state=42)
-df_clean_train = pd.concat([X, y], axis=1)
-
+df_train = pd.read_csv("~/oc-projects/implementez-modele-scoring/df_train.csv")
     
 # Initialisation de l'application Dash
 app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
@@ -124,9 +99,9 @@ def update_prediction(client_id):
     Input(component_id='input-client', component_property='value')
 )
 def update_graph(col_chosen, client_id):
-    fig = px.histogram(df_clean_train, x=col_chosen, color="TARGET", title=f'Distribution en fonction de {col_chosen}')
+    fig = px.histogram(df_train, x=col_chosen, color="TARGET", title=f'Distribution en fonction de {col_chosen}')
     fig.add_vline(
-        x=df_clean_train.loc[int(client_id), col_chosen],
+        x=df_train.loc[int(client_id), col_chosen],
         line_dash="dash",
         line_color="red",
         annotation_text=f"Client id: {client_id}",
@@ -142,10 +117,10 @@ def update_graph(col_chosen, client_id):
     Input(component_id='input-client', component_property='value')
 )
 def update_graph_bi(feature_bi1, feature_bi2, client_id):
-    fig = px.scatter(df_clean_train, x=feature_bi1, y=feature_bi2, color="TARGET", title=f'Analyse bivariée en fonction de {feature_bi1} et {feature_bi2}')
+    fig = px.scatter(df_train, x=feature_bi1, y=feature_bi2, color="TARGET", title=f'Analyse bivariée en fonction de {feature_bi1} et {feature_bi2}')
     fig.add_trace(px.scatter(
-        x=[df_clean_train.loc[int(client_id), feature_bi1]],
-        y=[df_clean_train.loc[int(client_id), feature_bi2]],
+        x=[df_train.loc[int(client_id), feature_bi1]],
+        y=[df_train.loc[int(client_id), feature_bi2]],
         color=[1],
         size=[100]).data[0])
     return fig
@@ -228,7 +203,7 @@ def create_local_importance_graph(shap_values, client_id):
 )
 def update_feature_importance(client_id):
     # Entraîner le modèle et obtenir les importances des fonctionnalités
-    shap_values, global_importance = train_model_and_get_feature_importance(df_clean_train, int(client_id))
+    shap_values, global_importance = train_model_and_get_feature_importance(df_train, int(client_id))
     print(shap_values)
     print(global_importance)
     # Créer les graphiques d'importance globale et locale
