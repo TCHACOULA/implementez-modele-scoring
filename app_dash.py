@@ -14,8 +14,16 @@ import dash_html_components as html
 from dash.dependencies import Input, Output
 import plotly.express as px
 import dash_bootstrap_components as dbc
+import dash_daq as daq
 import requests
 import shap
+import base64
+import plotly.graph_objects as go
+import logging
+from joblib import load
+
+logging.basicConfig(level=logging.INFO)
+
 
 external_stylesheets = [dbc.themes.BOOTSTRAP]
 
@@ -57,6 +65,17 @@ app.layout = html.Div(children=[
         ]
     ),
     html.Hr(),
+    html.Div([
+        daq.Gauge(id='my-gauge-1',
+                  label="Mon jauge", 
+                  value=0, 
+                  showCurrentValue=True,
+                  units="MPH", 
+                  max=1, 
+                  min=0
+                  ),
+    ]),
+    html.Hr(),
     html.Label('Sélectionnez une colonne :'),
     dcc.Dropdown(options=df_application_test.columns[1:], value='CODE_GENDER', id='feature-dropdown'),
     dcc.Graph(figure={}, id='feature-distribution'),
@@ -68,29 +87,48 @@ app.layout = html.Div(children=[
     ]),
     dcc.Graph(figure={}, id='feature-distribution-bi'),
     html.Hr(),
-
     # Créer un composant graphique Dash à partir de la figure
     html.Div([
         dcc.Graph(
             id='global-importance',
             figure={}
         ),
-        dcc.Graph(
-            id='local-importance',
-            figure={}  # Afficher les valeurs pour le premier échantillon
-        ),
-
     ]),
-   
+    html.Hr(),
+    html.Div(id="local-importance"),
 ])
+
+def predict(client_id):
+    if not client_id:
+        client_id = "0"
+    response = requests.post(f"http://127.0.0.1:8000/predict?id={int(client_id)}")
+    return str(response.json())
 
 @callback(
     Output(component_id='prediction', component_property='children'),
     Input(component_id='input-client', component_property='value')
 )
 def update_prediction(client_id):
-    response = requests.post(f"http://127.0.0.1:8000/predict?id={int(client_id)}")
-    return "Résultat de la prédiction: {}".format(str(response.json()))
+    pred = 0
+    try:
+        pred = predict(client_id)
+    except Exception as e:
+        logging.error("Une erreur est souvenue lors de la prédiction")
+
+    return "Résultat de la prédiction: {}".format(pred)
+
+@callback(
+    Output(component_id='my-gauge-1', component_property='value'),
+    Input(component_id='input-client', component_property='value')
+)
+def update_jauge(client_id):
+    pred = 0
+    try:
+        pred = predict(client_id)
+    except Exception as e:
+        logging.error("Une erreur est souvenue lors de la prédiction")
+
+    return float(pred)
 
 # Définition des callbacks pour les mises à jour dynamiques
 @callback(
@@ -99,6 +137,8 @@ def update_prediction(client_id):
     Input(component_id='input-client', component_property='value')
 )
 def update_graph(col_chosen, client_id):
+    if not client_id:
+        client_id = "0"
     fig = px.histogram(df_train, x=col_chosen, color="TARGET", title=f'Distribution en fonction de {col_chosen}')
     fig.add_vline(
         x=df_train.loc[int(client_id), col_chosen],
@@ -117,6 +157,8 @@ def update_graph(col_chosen, client_id):
     Input(component_id='input-client', component_property='value')
 )
 def update_graph_bi(feature_bi1, feature_bi2, client_id):
+    if not client_id:
+        client_id = "0"
     fig = px.scatter(df_train, x=feature_bi1, y=feature_bi2, color="TARGET", title=f'Analyse bivariée en fonction de {feature_bi1} et {feature_bi2}')
     fig.add_trace(px.scatter(
         x=[df_train.loc[int(client_id), feature_bi1]],
@@ -125,93 +167,77 @@ def update_graph_bi(feature_bi1, feature_bi2, client_id):
         size=[100]).data[0])
     return fig
 
-# Fonction pour entraîner un modèle et obtenir les importances des fonctionnalités
-def train_model_and_get_feature_importance(data, client_id):
-    # Filtrer les données en fonction du client spécifié
-    #filtered_data = data.loc[client_id]
-    
-    # Séparation des caractéristiques et de la cible
-    X = data.drop('TARGET', axis=1)
-    medians = X.median()  
-    X.replace(np.inf, medians, inplace=True)
-    X.replace(-np.inf, medians, inplace=True)
-    X = X.fillna(medians)
-    y = data['TARGET']
-    
-    # Création du modèle
-    model = RandomForestClassifier()
-    
-    # Entraînement du modèle
-    model.fit(X, y)
-    
-    # Initialiser l'explorateur SHAP avec le modèle entraîné
-    explainer = shap.TreeExplainer(model)
-    
-    # Calculer les valeurs SHAP pour l'ensemble des données
-    shap_values = explainer.shap_values(X)
-    
-    # Obtention de l'importance globale
-    
-    global_shap_df = (
-        pd.DataFrame(np.abs(shap_values.values)
-        .mean(axis=0), index=X.columns, columns=['SHAP Value'])
-        .sort_values(by='SHAP Value', ascending=False)
-    )
-    print(global_shap_df)
-    local_shap_values = (
-        pd.DataFrame(shap_values.values[client_id], index=X.columns, columns=['SHAP Value'])
-        .sort_values(by='SHAP Value', ascending=False)
-    )
-    print(local_shap_values)
-    return local_shap_values, global_shap_df
-
 
 # Obtenir les valeurs SHAP et l'importance globale avec SHAP
-#shap_values, global_importance = train_model_and_get_feature_importance(df_clean_train, client_id=client_id)
 
 # Créer un graphique à barres pour afficher l'importance globale
-def create_global_importance_graph(global_importance):
+def create_global_importance_graph(feature_names):
+    model = load("/home/saliou/oc-projects/implementez-modele-scoring/lgbm.joblib")
+    df_feature_importance = (
+        pd.DataFrame({
+            'feature': model.feature_name_,
+            'importance': model.feature_importances_,
+        })
+    .sort_values('importance', ascending=True)
+    )
+    features = [feature_names[int(col.split("_")[1])] for col in df_feature_importance.feature]
     fig = px.bar(
-        global_importance,
-        y=global_importance.index,
-        x="Shap value",
+        y=features, 
+        x=df_feature_importance.importance,
         orientation="h",
-        #text=[global_importance],
-        #labels={'x': 'Importance', 'y': 'Value'},
         title='Global Feature Importance'
     )
     return fig
 
 # Créer un graphique à barres pour afficher l'importance locale
-def create_local_importance_graph(shap_values, client_id):
-    fig = px.bar(
-        shap_values,
-        y=shap_values.index,
-        x="Shap value",
-        orientation="h",
-        #text=['Feature ' + str(i) for i in range(len(shap_values[index]))],
-        #labels={'x': 'Feature Index', 'y': 'Importance'},
-        title='Local Feature Importance (Sample ' + str(client_id) + ')'
-    )
-    return fig
+def create_local_importance_graph(client_id):
+    model = load("/home/saliou/oc-projects/implementez-modele-scoring/lgbm.joblib")
+    explainer_raw = shap.TreeExplainer(model)
+    shap_values = explainer_raw(df_application_test)
+    class_idx = 1
+    expected_value = explainer_raw.expected_value[class_idx]
+    shap_value = shap_values[:, :, class_idx].values[client_id]
+    print(shap_value)
+    force_plot = shap.force_plot(
+        base_value=expected_value,
+        shap_values=shap_value,
+        features=df_application_test.iloc[client_id, :],
+        link="logit",  # <-- here
+        show=False
+        )
+    # Save the SHAP plot as a PNG image
+    shap_image_path = 'shap_plot.html'
+    shap.save_html(shap_image_path, force_plot)
+    plt.close('all')
+
+    iframe = html.Iframe(srcDoc=open(shap_image_path, 'r').read(), width='100%', height='600px')
+
+    return iframe
 
 # Définition des callbacks pour mettre à jour les graphiques d'importance globale et locale
 @callback(
     Output(component_id='global-importance', component_property='figure'),
-    Output(component_id='local-importance', component_property='figure'),
     Input(component_id='input-client', component_property='value')
 )
-def update_feature_importance(client_id):
-    # Entraîner le modèle et obtenir les importances des fonctionnalités
-    shap_values, global_importance = train_model_and_get_feature_importance(df_train, int(client_id))
-    print(shap_values)
-    print(global_importance)
-    # Créer les graphiques d'importance globale et locale
-    global_fig = create_global_importance_graph(global_importance)
-    local_fig = create_local_importance_graph(shap_values, int(client_id))  # Afficher les valeurs pour le premier échantillon
-    
-    return global_fig, local_fig
+def global_feature_importance(client_id):
 
+    # Créer les graphiques d'importance globale et locale
+    global_fig = create_global_importance_graph(df_application_test.columns.to_list())
+    
+    return global_fig
+
+@callback(
+    Output(component_id='local-importance', component_property='children'),
+    Input(component_id='input-client', component_property='value')
+)
+def update_local_feature_importance(client_id):
+    if not client_id:
+        client_id = "0"
+
+    # Créer les graphiques d'importance globale et locale
+    local_fig = create_local_importance_graph(int(client_id))  # Afficher les valeurs pour le premier échantillon
+    
+    return local_fig
 
 # Lancement de l'application
 if __name__ == '__main__':
