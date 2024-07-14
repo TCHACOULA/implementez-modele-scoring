@@ -68,9 +68,10 @@ app.layout = html.Div(children=[
     html.Div([
         daq.Gauge(id='my-gauge-1',
                   label="Mon jauge", 
-                  value=0, 
+                  value=0.7, 
                   showCurrentValue=True,
-                  units="MPH", 
+                  units="MPH",
+                  color={"gradient":True,"ranges":{"red":[0, 0.6],"yellow":[0.6, 0.7],"green":[0.7, 1]}}, 
                   max=1, 
                   min=0
                   ),
@@ -163,7 +164,7 @@ def update_graph_bi(feature_bi1, feature_bi2, client_id):
     fig.add_trace(px.scatter(
         x=[df_train.loc[int(client_id), feature_bi1]],
         y=[df_train.loc[int(client_id), feature_bi2]],
-        color=[1],
+        color_discrete_sequence=['red'],
         size=[100]).data[0])
     return fig
 
@@ -192,8 +193,10 @@ def create_global_importance_graph(feature_names):
 # Créer un graphique à barres pour afficher l'importance locale
 def create_local_importance_graph(client_id):
     model = load("/home/saliou/oc-projects/implementez-modele-scoring/lgbm.joblib")
+    loaded_scaler = load("/home/saliou/oc-projects/implementez-modele-scoring/scaler.joblib")
     explainer_raw = shap.TreeExplainer(model)
-    shap_values = explainer_raw(df_application_test)
+    df_application_test_scaled = loaded_scaler.transform(df_application_test)
+    shap_values = explainer_raw(df_application_test_scaled)
     class_idx = 1
     expected_value = explainer_raw.expected_value[class_idx]
     shap_value = shap_values[:, :, class_idx].values[client_id]

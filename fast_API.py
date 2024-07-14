@@ -16,6 +16,7 @@ df_application_test = pd.read_csv("~/oc-projects/implementez-modele-scoring/df_a
 
 # chargement du modèle
 loaded_model = load("/home/saliou/oc-projects/implementez-modele-scoring/lgbm.joblib")
+loaded_scaler = load("/home/saliou/oc-projects/implementez-modele-scoring/scaler.joblib")
 # Création du nouvelle instance fastAPI
 app = FastAPI()
 
@@ -25,6 +26,7 @@ def predict(id: int):
     try:
         # Utilisez les données fournies dans la requête pour la prédiction
         client = df_application_test.iloc[id].values.reshape(1, -1)
+        client = loaded_scaler.transform(client)
         # Prédiction
         proba = loaded_model.predict_proba(client)[0][1]
         print(proba)
