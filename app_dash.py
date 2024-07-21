@@ -1,5 +1,4 @@
 import pandas as pd
-import matplotlib.pyplot as plt
 import dash
 from dash import html, dash_table, dcc, callback, Output, Input
 import dash_core_components as dcc
@@ -21,6 +20,10 @@ external_stylesheets = [dbc.themes.BOOTSTRAP]
 X = pd.read_csv("./data/X.csv")
 df_application_test = pd.read_csv("./data/df_application_test.csv")
 df_train = pd.read_csv("./data/df_train.csv")
+
+# Chargement des modèles
+model = load("./models/lgbm.joblib")
+loaded_scaler = load("./models/scaler.joblib")
 
 # Initialisation de l'application Dash
 app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
@@ -225,10 +228,6 @@ def create_global_importance_graph(feature_names):
 
 # Créer un graphique à barres pour afficher l'importance locale
 def create_local_importance_graph(client_id):
-    model = load("/home/saliou/oc-projects/implementez-modele-scoring/lgbm.joblib")
-    loaded_scaler = load(
-        "/home/saliou/oc-projects/implementez-modele-scoring/scaler.joblib"
-    )
     explainer_raw = shap.TreeExplainer(model)
     df_application_test_scaled = loaded_scaler.transform(df_application_test)
     shap_values = explainer_raw(df_application_test_scaled)
@@ -246,7 +245,6 @@ def create_local_importance_graph(client_id):
     # Save the SHAP plot as a PNG image
     shap_image_path = "shap_plot.html"
     shap.save_html(shap_image_path, force_plot)
-    plt.close("all")
 
     iframe = html.Iframe(
         srcDoc=open(shap_image_path, "r").read(), width="100%", height="600px"
