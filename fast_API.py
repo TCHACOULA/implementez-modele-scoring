@@ -10,13 +10,13 @@ from typing import Optional
 from fastapi import FastAPI
 from pydantic import BaseModel
 
-X = pd.read_csv("~/oc-projects/implementez-modele-scoring/X.csv")
-df_application_test = pd.read_csv("~/oc-projects/implementez-modele-scoring/df_application_test.csv")
+X = pd.read_csv("./data/X.csv")
+df_application_test = pd.read_csv("./data/df_application_test.csv")
 
 
 # chargement du modèle
-loaded_model = load("/home/saliou/oc-projects/implementez-modele-scoring/lgbm.joblib")
-loaded_scaler = load("/home/saliou/oc-projects/implementez-modele-scoring/scaler.joblib")
+loaded_model = load("./models/lgbm.joblib")
+loaded_scaler = load("./models/scaler.joblib")
 # Création du nouvelle instance fastAPI
 app = FastAPI()
 
@@ -40,4 +40,4 @@ def predict(id: int):
 # Lancement de l'application
 if __name__ == '__main__':
     import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    uvicorn.run(app, host="0.0.0.0")
