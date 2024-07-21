@@ -118,7 +118,7 @@ app.layout = html.Div(
 def predict(client_id):
     if not client_id:
         client_id = "0"
-    response = requests.post(f"http://127.0.0.1:8000/predict?id={int(client_id)}")
+    response = requests.post(f"https://ocprojet7.azurewebsites.net/predict?id={int(client_id)}")
     return str(response.json())
 
 
@@ -207,7 +207,6 @@ def update_graph_bi(feature_bi1, feature_bi2, client_id):
 
 # Créer un graphique à barres pour afficher l'importance globale
 def create_global_importance_graph(feature_names):
-    model = load("/home/saliou/oc-projects/implementez-modele-scoring/lgbm.joblib")
     df_feature_importance = pd.DataFrame(
         {
             "feature": model.feature_name_,
