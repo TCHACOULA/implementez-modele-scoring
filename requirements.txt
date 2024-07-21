@@ -8,6 +8,7 @@ Flask==3.0.3
 joblib==1.4.2
 numpy==2.0.0
 pandas==2.2.2
+lightgbm==4.4.0
 plotly==5.18.0
 pydantic==2.8.2
 Requests==2.32.3
