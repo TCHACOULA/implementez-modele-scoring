@@ -119,7 +119,7 @@ app.layout = html.Div(
 def predict(client_id):
     if not client_id:
         client_id = "0"
-    response = requests.post(f"https://ocprojet7.azurewebsites.net/predict?id={int(client_id)}")
+    response = requests.post("https://ocprojet7.azurewebsites.net/predict", json={"id": int(client_id)})
     return str(response.json())
 
 
